@@ -1621,7 +1621,7 @@ local function JoinDiscord(invite)
         -- 3) Benachrichtigung
         local desc
         if opened and copied then
-            desc = "Opening Discord... link copied (discord.gg/" .. code .. ")"
+            desc = "link copied (discord.gg/" .. code .. ")"
         elseif opened then
             desc = "Opening Discord... (discord.gg/" .. code .. ")"
         elseif copied then
