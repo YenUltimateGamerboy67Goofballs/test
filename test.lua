@@ -1574,22 +1574,67 @@ local function JoinDiscord(invite)
     local code = invite:match("discord%.gg/([%w%-_]+)")
         or invite:match("discord%.com/invite/([%w%-_]+)")
         or invite
-    Copy("https://discord.gg/" .. code)
+    local link = "https://discord.gg/" .. code
+    local copied = Copy(link)
 
-    local req = (syn and syn.request) or request or http_request or (http and http.request)
-    if req then
-        pcall(req, {
-            Url = "http://127.0.0.1:6463/rpc?v=1",
-            Method = "POST",
-            Headers = { ["Content-Type"] = "application/json", ["Origin"] = "https://discord.com" },
-            Body = HttpService:JSONEncode({
-                cmd = "INVITE_BROWSER",
-                args = { code = code },
-                nonce = HttpService:GenerateGUID(false),
-            }),
+    task.spawn(function()
+        local opened = false
+
+        -- 1) Discord-App am PC ueber den lokalen RPC-Server (probiert Ports 6463-6472)
+        local req = (syn and syn.request) or request or http_request or (http and http.request)
+        if req then
+            for port = 6463, 6472 do
+                local ok, res = pcall(req, {
+                    Url = "http://127.0.0.1:" .. port .. "/rpc?v=1",
+                    Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json", ["Origin"] = "https://discord.com" },
+                    Body = HttpService:JSONEncode({
+                        cmd = "INVITE_BROWSER",
+                        args = { code = code },
+                        nonce = HttpService:GenerateGUID(false),
+                    }),
+                })
+                if ok and type(res) == "table" and (res.Success == true or res.StatusCode == 200) then
+                    opened = true
+                    break
+                end
+            end
+        end
+
+        -- 2) Fallback: Link im Browser oeffnen, falls der Executor eine passende Funktion hat
+        if not opened then
+            local env = (getgenv and getgenv()) or _G
+            for _, name in ipairs({ "openurl", "open_url", "OpenURL" }) do
+                local fn = env[name]
+                if type(fn) == "function" and pcall(fn, link) then
+                    opened = true
+                    break
+                end
+            end
+            if not opened then
+                opened = pcall(function()
+                    game:GetService("GuiService"):OpenBrowserWindow(link)
+                end)
+            end
+        end
+
+        -- 3) Benachrichtigung
+        local desc
+        if opened and copied then
+            desc = "Opening Discord... link copied (discord.gg/" .. code .. ")"
+        elseif opened then
+            desc = "Opening Discord... (discord.gg/" .. code .. ")"
+        elseif copied then
+            desc = "Link copied - paste it in your browser: discord.gg/" .. code
+        else
+            desc = "Open this link manually: discord.gg/" .. code
+        end
+        RavineUI:Notify({
+            Title = "Discord",
+            Description = desc,
+            Icon = (opened or copied) and "circle-check" or "triangle-alert",
         })
-    end
-    RavineUI:Notify({ Title = "Discord", Description = "Invite copied: discord.gg/" .. code, Icon = "circle-check" })
+    end)
 end
 
 -- ---- Discord (Live-Daten ueber die Invite-API) ----
