@@ -1089,7 +1089,7 @@ function RavineUI:ShowChangelog(opts)
         Removed = "minus",
         Information = "info",
     }
-    local typeOrder = { "Added", "Improved", "Changed", "Fixed", "Removed" }
+    local typeOrder = { "Information", "Added", "Improved", "Changed", "Fixed", "Removed" }
 
     local groups, extra = {}, {}
     for _, entry in ipairs(entries) do
