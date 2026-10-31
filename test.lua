@@ -1087,6 +1087,7 @@ function RavineUI:ShowChangelog(opts)
         Changed = "refresh-cw",
         Fixed = "wrench",
         Removed = "minus",
+        Information = "info",
     }
     local typeOrder = { "Added", "Improved", "Changed", "Fixed", "Removed" }
 
