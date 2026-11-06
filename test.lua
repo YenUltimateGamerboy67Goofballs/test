@@ -1,14 +1,9 @@
 --[[
     RavineUI - Modern Dashboard UI Library
-    Version 2.6
+    Version 2.6 - CRIMSON EDITION
 
-    NEU in 2.6:
-        Loading Screen (animiert, mit Steps + Progress)
-        Minimized Pill / Island oben mittig (hover = expand, drag = reposition)
-        Backdrop + Weather (Rain, Snow, Ember, Sakura, Fireflies, Matrix)
-        Drag-Accent-Stroke beim Ziehen
-        Island-Activity bei Notify wenn minimized
-        Alles abschaltbar: CreateWindow({ Loading = false, Weather = nil, MinimizedPill = false })
+    Farben: Crimson (rot)
+    Icons: Lucide (lucide-roblox-direct, mit Fallback)
 ]]
 
 local RavineUI = {
@@ -19,7 +14,7 @@ local RavineUI = {
 }
 
 RavineUI.__index = RavineUI
-RavineUI.Build = "ravine-26"
+RavineUI.Build = "ravine-26-crimson"
 
 -- ============ SERVICES ============
 local Players = game:GetService("Players")
@@ -50,7 +45,7 @@ Tab.__index = Tab
 local Groupbox = {}
 Groupbox.__index = Groupbox
 
--- ============ THEME ============
+-- ============ THEME (CRIMSON) ============
 local Theme = {
     Background = Color3.fromRGB(10, 10, 13),
     Secondary = Color3.fromRGB(16, 16, 20),
@@ -67,6 +62,7 @@ local Theme = {
     ToggleOff = Color3.fromRGB(55, 55, 65),
     Success = Color3.fromRGB(46, 204, 113),
     Warning = Color3.fromRGB(236, 190, 60),
+    Error = Color3.fromRGB(231, 76, 60),
     Font = Enum.Font.GothamMedium,
     FontBold = Enum.Font.GothamBold,
     TextSize = 14,
@@ -132,17 +128,12 @@ local function Create(className, props, noTheme)
             end
         end
     end
-    if parent then
-        inst.Parent = parent
-    end
+    if parent then inst.Parent = parent end
     return inst
 end
 
 local function Corner(inst, radius)
-    return Create("UICorner", {
-        CornerRadius = UDim.new(0, radius or Theme.CornerRadius),
-        Parent = inst,
-    })
+    return Create("UICorner", { CornerRadius = UDim.new(0, radius or Theme.CornerRadius), Parent = inst })
 end
 
 local function Stroke(inst, color, thickness)
@@ -184,9 +175,7 @@ local function CountTo(label, from, to, fmt, dur)
             local a = math.clamp((os.clock() - t0) / dur, 0, 1)
             local e = 1 - (1 - a) ^ 3
             label.Text = fmt(math.floor(from + (to - from) * e + 0.5))
-            if a >= 1 then
-                return
-            end
+            if a >= 1 then return end
             task.wait()
         end
     end)
@@ -203,9 +192,7 @@ local function Ripple(btn, color)
     btn.InputBegan:Connect(function(input)
         if not Anim() then return end
         if input.UserInputType ~= Enum.UserInputType.MouseButton1
-            and input.UserInputType ~= Enum.UserInputType.Touch then
-            return
-        end
+            and input.UserInputType ~= Enum.UserInputType.Touch then return end
         local abs, sz = btn.AbsolutePosition, btn.AbsoluteSize
         if sz.X <= 0 or sz.Y <= 0 then return end
         local uis = (RavineUI._scaleInst and RavineUI._scaleInst.Scale) or 1
@@ -214,13 +201,11 @@ local function Ripple(btn, color)
         local d = math.max(sz.X, sz.Y) * 2.2 / math.max(uis, 0.05)
         local dot = Create("Frame", {
             BackgroundColor3 = color or Color3.new(1, 1, 1),
-            BackgroundTransparency = 0.82,
-            BorderSizePixel = 0,
+            BackgroundTransparency = 0.82, BorderSizePixel = 0,
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position = UDim2.fromScale(rx, ry),
             Size = UDim2.fromOffset(0, 0),
-            ZIndex = 10,
-            Parent = btn,
+            ZIndex = 10, Parent = btn,
         }, true)
         Corner(dot, 1000)
         Tween(dot, 0.55, { Size = UDim2.fromOffset(d, d), BackgroundTransparency = 1 }, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
@@ -233,21 +218,13 @@ local function Gradient(frame, keypoints, rotation)
     for _, k in ipairs(keypoints) do
         table.insert(seq, ColorSequenceKeypoint.new(k[1], k[2]))
     end
-    return Create("UIGradient", {
-        Color = ColorSequence.new(seq),
-        Rotation = rotation or 0,
-        Parent = frame,
-    })
+    return Create("UIGradient", { Color = ColorSequence.new(seq), Rotation = rotation or 0, Parent = frame })
 end
 
 local function Glow(parent, color, rotation, strength)
     local g = Create("Frame", {
-        Name = "Glow",
-        BackgroundColor3 = color,
-        BorderSizePixel = 0,
-        Size = UDim2.fromScale(1, 1),
-        ZIndex = 1,
-        Parent = parent,
+        Name = "Glow", BackgroundColor3 = color, BorderSizePixel = 0,
+        Size = UDim2.fromScale(1, 1), ZIndex = 1, Parent = parent,
     })
     Corner(g, 10)
     Create("UIGradient", {
@@ -255,8 +232,7 @@ local function Glow(parent, color, rotation, strength)
             NumberSequenceKeypoint.new(0, 1 - (strength or 0.5)),
             NumberSequenceKeypoint.new(1, 1),
         }),
-        Rotation = rotation or 0,
-        Parent = g,
+        Rotation = rotation or 0, Parent = g,
     })
     return g
 end
@@ -294,7 +270,6 @@ end
 local function MakeDraggable(frame, handle, getScale)
     local state = { Moved = 0 }
     local dragging, dragStart, startPos
-
     handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
             or input.UserInputType == Enum.UserInputType.Touch then
@@ -303,13 +278,10 @@ local function MakeDraggable(frame, handle, getScale)
             dragStart = input.Position
             startPos = frame.Position
             input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
             end)
         end
     end)
-
     Connect(UserInputService.InputChanged, function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
             or input.UserInputType == Enum.UserInputType.Touch) then
@@ -322,7 +294,6 @@ local function MakeDraggable(frame, handle, getScale)
             )
         end
     end)
-
     return state
 end
 
@@ -331,7 +302,6 @@ local function TrackDrag(hit, column, onMove, onBegin, onEnd)
     local function setScroll(v)
         if column then column.ScrollingEnabled = v end
     end
-
     hit.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
             or input.UserInputType == Enum.UserInputType.Touch then
@@ -357,20 +327,65 @@ local function TrackDrag(hit, column, onMove, onBegin, onEnd)
     end)
 end
 
--- ============ LUCIDE ICONS ============
+-- ============ LUCIDE ICONS (robust) ============
 local IconModule
-do
-    local ok, mod = pcall(function()
-        return loadstring(game:HttpGet(
-            "https://raw.githubusercontent.com/mstudio45/lucide-roblox-direct/refs/heads/main/source.lua"
-        ))()
+
+-- 1) Cache probieren
+if type(isfile) == "function" and type(readfile) == "function" then
+    local ok, cached = pcall(function()
+        if isfile("RavineUI/lucide.lua") then return readfile("RavineUI/lucide.lua") end
+        return nil
     end)
-    if ok and type(mod) == "table" then
-        IconModule = mod
+    if ok and type(cached) == "string" and cached ~= "" then
+        local ok2, mod = pcall(function() return loadstring(cached)() end)
+        if ok2 and type(mod) == "table" and mod.GetAsset then
+            IconModule = mod
+        end
     end
 end
 
-local IconAliases = { home = "house", gear = "settings", close = "x", plus = "plus", search = "search" }
+-- 2) Aus dem Internet laden (mehrere URLs)
+if not IconModule then
+    local IconSources = {
+        "https://raw.githubusercontent.com/mstudio45/lucide-roblox-direct/refs/heads/main/source.lua",
+        "https://raw.githubusercontent.com/mstudio45/lucide-roblox-direct/main/source.lua",
+        "https://raw.githubusercontent.com/mstudio45/lucide-roblox-direct/master/source.lua",
+    }
+    for _, url in ipairs(IconSources) do
+        local ok, mod = pcall(function()
+            local src = game:HttpGet(url)
+            return loadstring(src)()
+        end)
+        if ok and type(mod) == "table" and mod.GetAsset then
+            IconModule = mod
+            -- Cache für nächstes Mal
+            if type(writefile) == "function" and type(makefolder) == "function" and type(isfolder) == "function" then
+                pcall(function()
+                    if not isfolder("RavineUI") then makefolder("RavineUI") end
+                    writefile("RavineUI/lucide.lua", game:HttpGet(url))
+                end)
+            end
+            break
+        end
+    end
+end
+
+if IconModule then
+    print("[RavineUI] Lucide Icons geladen: OK")
+else
+    warn("[RavineUI] Lucide Icons NICHT geladen - Icons = Buchstaben-Fallback")
+end
+
+local IconAliases = {
+    home = "house", gear = "settings", close = "x", plus = "plus", search = "search",
+    minus = "minus", trash = "trash-2", folder = "folder", save = "save", load = "folder-open",
+    refresh = "refresh-cw", check = "check", warning = "triangle-alert", error = "circle-x",
+    success = "circle-check", info = "info", user = "user", users = "users", shield = "shield",
+    lock = "lock", key = "key", eye = "eye", eye_off = "eye-off", bell = "bell", zap = "zap",
+    star = "star", heart = "heart", palette = "palette", settings = "settings",
+    tools = "wrench", cloud = "cloud", sun = "sun", moon = "moon", sparkles = "sparkles",
+    gamepad = "gamepad-2", sword = "sword", swords = "swords",
+}
 
 function RavineUI:SetIconModule(mod) IconModule = mod end
 function RavineUI:AddIcon(name, asset)
@@ -384,9 +399,7 @@ end
 
 function RavineUI:GetIcon(icon)
     local t = type(icon)
-    if t == "table" then
-        return icon.Url and icon or nil
-    end
+    if t == "table" then return icon.Url and icon or nil end
     if t == "number" then
         return { Url = "rbxassetid://" .. icon, ImageRectOffset = Vector2.new(0, 0), ImageRectSize = Vector2.new(0, 0) }
     end
@@ -396,7 +409,6 @@ function RavineUI:GetIcon(icon)
         return { Url = icon, ImageRectOffset = Vector2.new(0, 0), ImageRectSize = Vector2.new(0, 0) }
     end
     if tonumber(icon) then return self:GetIcon(tonumber(icon)) end
-
     local name = (icon:gsub("^lucide[-:]", ""))
     name = IconAliases[name] or name
     if IconModule and IconModule.GetAsset then
@@ -417,24 +429,17 @@ end
 
 local function NewIcon(parent, icon, px, color, fallback)
     local img = Create("ImageLabel", {
-        BackgroundTransparency = 1,
-        Size = UDim2.fromOffset(px, px),
-        ImageColor3 = color,
-        ScaleType = Enum.ScaleType.Fit,
-        Parent = parent,
+        BackgroundTransparency = 1, Size = UDim2.fromOffset(px, px),
+        ImageColor3 = color, ScaleType = Enum.ScaleType.Fit, Parent = parent,
     })
     if SetIcon(img, icon) then
         return { Instance = img, Prop = "ImageColor3", Ok = true }
     end
     img:Destroy()
     local lbl = Create("TextLabel", {
-        BackgroundTransparency = 1,
-        Size = UDim2.fromOffset(px, px),
-        Font = Theme.FontBold,
-        Text = fallback or "?",
-        TextColor3 = color,
-        TextSize = math.floor(px * 0.85),
-        Parent = parent,
+        BackgroundTransparency = 1, Size = UDim2.fromOffset(px, px),
+        Font = Theme.FontBold, Text = fallback or "?", TextColor3 = color,
+        TextSize = math.floor(px * 0.85), Parent = parent,
     })
     return { Instance = lbl, Prop = "TextColor3", Ok = false }
 end
@@ -455,19 +460,14 @@ end
 -- ============ OPTION REGISTRY ============
 local function NewOption(kind, id, value)
     local obj = { Type = kind, Id = id, Value = value, _changed = {} }
-
     function obj:OnChanged(fn)
         table.insert(self._changed, fn)
         return self
     end
-
     local function changed(v)
         obj.Value = v
-        for _, fn in ipairs(obj._changed) do
-            task.spawn(fn, v)
-        end
+        for _, fn in ipairs(obj._changed) do task.spawn(fn, v) end
     end
-
     local registry = (kind == "Toggle") and RavineUI.Toggles or RavineUI.Options
     registry[id] = obj
     return obj, changed
@@ -481,16 +481,11 @@ local function GetGuiParent()
 end
 
 local function EnsureGui()
-    if RavineUI.Gui and RavineUI.Gui.Parent then
-        return RavineUI.Gui
-    end
+    if RavineUI.Gui and RavineUI.Gui.Parent then return RavineUI.Gui end
     RavineUI.Gui = Create("ScreenGui", {
-        Name = "RavineUI",
-        ResetOnSpawn = false,
-        IgnoreGuiInset = true,
+        Name = "RavineUI", ResetOnSpawn = false, IgnoreGuiInset = true,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-        DisplayOrder = 100,
-        Parent = GetGuiParent(),
+        DisplayOrder = 100, Parent = GetGuiParent(),
     })
     return RavineUI.Gui
 end
@@ -502,36 +497,21 @@ local function TipEnsure()
     if Tip.Frame and Tip.Frame.Parent then return Tip.Frame end
     local gui = EnsureGui()
     local f = Create("Frame", {
-        Name = "Tooltip",
-        BackgroundColor3 = Theme.Secondary,
-        BorderSizePixel = 0,
-        AutomaticSize = Enum.AutomaticSize.XY,
-        Size = UDim2.fromOffset(0, 0),
-        Visible = false,
-        ZIndex = 1000,
-        Parent = gui,
+        Name = "Tooltip", BackgroundColor3 = Theme.Secondary, BorderSizePixel = 0,
+        AutomaticSize = Enum.AutomaticSize.XY, Size = UDim2.fromOffset(0, 0),
+        Visible = false, ZIndex = 1000, Parent = gui,
     })
     Corner(f, 6)
     Stroke(f, Theme.Border, 1)
     Create("UIPadding", {
-        PaddingLeft = UDim.new(0, 10),
-        PaddingRight = UDim.new(0, 10),
-        PaddingTop = UDim.new(0, 7),
-        PaddingBottom = UDim.new(0, 7),
-        Parent = f,
+        PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10),
+        PaddingTop = UDim.new(0, 7), PaddingBottom = UDim.new(0, 7), Parent = f,
     })
     local label = Create("TextLabel", {
-        BackgroundTransparency = 1,
-        AutomaticSize = Enum.AutomaticSize.XY,
-        Size = UDim2.fromOffset(0, 0),
-        Font = Theme.Font,
-        Text = "",
-        TextColor3 = Theme.Text,
-        TextSize = 12,
-        TextWrapped = true,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        ZIndex = 1001,
-        Parent = f,
+        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.XY,
+        Size = UDim2.fromOffset(0, 0), Font = Theme.Font, Text = "",
+        TextColor3 = Theme.Text, TextSize = 12, TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 1001, Parent = f,
     })
     Create("UISizeConstraint", { MaxSize = Vector2.new(260, 1000), Parent = label })
     Tip.Frame = f
@@ -542,10 +522,7 @@ end
 local function TipHide()
     Tip.Token = Tip.Token + 1
     Tip.Bounds = nil
-    if Tip.Conn then
-        Tip.Conn:Disconnect()
-        Tip.Conn = nil
-    end
+    if Tip.Conn then Tip.Conn:Disconnect(); Tip.Conn = nil end
     if Tip.Frame then Tip.Frame.Visible = false end
 end
 
@@ -617,27 +594,22 @@ local NotifContainer
 local function EnsureNotifContainer()
     if NotifContainer and NotifContainer.Parent then return NotifContainer end
     RavineUI.NotifGui = Create("ScreenGui", {
-        Name = "RavineUI_Notifs",
-        ResetOnSpawn = false,
+        Name = "RavineUI_Notifs", ResetOnSpawn = false,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-        DisplayOrder = 101,
-        Parent = GetGuiParent(),
+        DisplayOrder = 101, Parent = GetGuiParent(),
     })
     NotifContainer = Create("Frame", {
-        Name = "Container",
-        BackgroundTransparency = 1,
+        Name = "Container", BackgroundTransparency = 1,
         Position = UDim2.new(1, -20, 1, -20),
         Size = UDim2.new(0, 300, 1, -40),
-        AnchorPoint = Vector2.new(1, 1),
-        Parent = RavineUI.NotifGui,
+        AnchorPoint = Vector2.new(1, 1), Parent = RavineUI.NotifGui,
     })
     Create("UIListLayout", {
         FillDirection = Enum.FillDirection.Vertical,
         HorizontalAlignment = Enum.HorizontalAlignment.Right,
         VerticalAlignment = Enum.VerticalAlignment.Bottom,
         SortOrder = Enum.SortOrder.LayoutOrder,
-        Padding = UDim.new(0, 8),
-        Parent = NotifContainer,
+        Padding = UDim.new(0, 8), Parent = NotifContainer,
     })
     return NotifContainer
 end
@@ -646,7 +618,6 @@ function RavineUI:Notify(opts)
     if type(opts) == "string" then opts = { Description = opts } end
     opts = opts or {}
 
-    -- NEU: Wenn minimized, kurz im Island anzeigen
     local activeWin = RavineUI._activeWindow
     if activeWin and activeWin.Minimized and activeWin._miniBar and activeWin._miniSetState then
         activeWin._miniSetState("Expanded")
@@ -662,30 +633,19 @@ function RavineUI:Notify(opts)
     local text = opts.Description or opts.Text or ""
     local duration = opts.Time or 4
 
-    local holder = Create("Frame", {
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 62),
-        Parent = container,
-    })
+    local holder = Create("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 62), Parent = container })
     local notif = Create("Frame", {
-        Name = "Notif",
-        BackgroundColor3 = Theme.Secondary,
-        BorderSizePixel = 0,
-        Size = UDim2.fromScale(1, 1),
-        Position = UDim2.new(1, 340, 0, 0),
-        ClipsDescendants = true,
-        Parent = holder,
+        Name = "Notif", BackgroundColor3 = Theme.Secondary, BorderSizePixel = 0,
+        Size = UDim2.fromScale(1, 1), Position = UDim2.new(1, 340, 0, 0),
+        ClipsDescendants = true, Parent = holder,
     })
     Corner(notif, 8)
     Stroke(notif, Theme.Border, 1)
 
     local accent = Create("Frame", {
-        BackgroundColor3 = Theme.Accent,
-        BorderSizePixel = 0,
-        Position = UDim2.new(0, 0, 0.5, 0),
-        AnchorPoint = Vector2.new(0, 0.5),
-        Size = UDim2.new(0, 3, 1, -24),
-        Parent = notif,
+        BackgroundColor3 = Theme.Accent, BorderSizePixel = 0,
+        Position = UDim2.new(0, 0, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5),
+        Size = UDim2.new(0, 3, 1, -24), Parent = notif,
     })
     Corner(accent, 3)
 
@@ -693,46 +653,28 @@ function RavineUI:Notify(opts)
     ic.Instance.Position = UDim2.new(0, 14, 0, 9)
 
     Create("TextLabel", {
-        BackgroundTransparency = 1,
-        Position = UDim2.new(0, 40, 0, 8),
-        Size = UDim2.new(1, -48, 0, 18),
-        Font = Theme.FontBold,
-        Text = title,
-        TextColor3 = Theme.Text,
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Parent = notif,
+        BackgroundTransparency = 1, Position = UDim2.new(0, 40, 0, 8),
+        Size = UDim2.new(1, -48, 0, 18), Font = Theme.FontBold,
+        Text = title, TextColor3 = Theme.Text, TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left, Parent = notif,
     })
     Create("TextLabel", {
-        BackgroundTransparency = 1,
-        Position = UDim2.new(0, 40, 0, 26),
-        Size = UDim2.new(1, -48, 1, -30),
-        Font = Theme.Font,
-        Text = text,
-        TextColor3 = Theme.SubText,
-        TextSize = 12,
-        TextWrapped = true,
+        BackgroundTransparency = 1, Position = UDim2.new(0, 40, 0, 26),
+        Size = UDim2.new(1, -48, 1, -30), Font = Theme.Font,
+        Text = text, TextColor3 = Theme.SubText, TextSize = 12, TextWrapped = true,
         TextXAlignment = Enum.TextXAlignment.Left,
-        TextYAlignment = Enum.TextYAlignment.Top,
-        Parent = notif,
+        TextYAlignment = Enum.TextYAlignment.Top, Parent = notif,
     })
 
     local bar = Create("Frame", {
-        BackgroundColor3 = Theme.Accent,
-        BackgroundTransparency = 0.3,
-        BorderSizePixel = 0,
-        AnchorPoint = Vector2.new(0, 1),
-        Position = UDim2.new(0, 0, 1, 0),
-        Size = UDim2.new(1, 0, 0, 2),
-        ZIndex = 3,
-        Parent = notif,
+        BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0.3,
+        BorderSizePixel = 0, AnchorPoint = Vector2.new(0, 1),
+        Position = UDim2.new(0, 0, 1, 0), Size = UDim2.new(1, 0, 0, 2),
+        ZIndex = 3, Parent = notif,
     })
     local dismiss = Create("TextButton", {
-        BackgroundTransparency = 1,
-        Size = UDim2.fromScale(1, 1),
-        Text = "",
-        ZIndex = 4,
-        Parent = notif,
+        BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1),
+        Text = "", ZIndex = 4, Parent = notif,
     })
 
     local animated = Anim()
@@ -781,9 +723,7 @@ function RavineUI:ShowChangelog(opts)
     local discord = opts.Discord
 
     local stored = {}
-    for k, v in pairs(opts) do
-        if k ~= "OnClose" then stored[k] = v end
-    end
+    for k, v in pairs(opts) do if k ~= "OnClose" then stored[k] = v end end
     RavineUI._LastChangelog = stored
 
     if RavineUI._ChangelogGui and RavineUI._ChangelogGui.Parent then
@@ -791,26 +731,18 @@ function RavineUI:ShowChangelog(opts)
     end
 
     local gui = Create("ScreenGui", {
-        Name = "RavineUI_Changelog",
-        ResetOnSpawn = false,
-        IgnoreGuiInset = true,
-        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-        DisplayOrder = 999,
-        Parent = GetGuiParent(),
+        Name = "RavineUI_Changelog", ResetOnSpawn = false, IgnoreGuiInset = true,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 999, Parent = GetGuiParent(),
     })
     RavineUI._ChangelogGui = gui
 
     local size = UDim2.fromOffset(520, 470)
     local main = Create("Frame", {
-        Name = "Main",
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
-        Size = size,
+        Name = "Main", AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5), Size = size,
         BackgroundColor3 = Theme.Background,
         BackgroundTransparency = RavineUI.ThemeState.Transparency,
-        BorderSizePixel = 0,
-        ClipsDescendants = true,
-        Parent = gui,
+        BorderSizePixel = 0, ClipsDescendants = true, Parent = gui,
     })
     Corner(main, 12)
     Stroke(main, Theme.Border, 1)
@@ -839,7 +771,11 @@ function RavineUI:ShowChangelog(opts)
     Create("TextLabel", { BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.new(0, 0, 0, 20), LayoutOrder = 1, Font = Theme.FontBold, Text = scriptName, TextColor3 = Theme.Text, TextSize = 15, Parent = titleHolder })
     Create("TextLabel", { BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.new(0, 0, 0, 20), LayoutOrder = 2, Font = Theme.Font, Text = "Changelog  v" .. version, TextColor3 = Theme.SubText, TextSize = 12, Parent = titleHolder })
 
-    local closeBtn = Create("TextButton", { BackgroundColor3 = Theme.Tertiary, BorderSizePixel = 0, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0), Size = UDim2.fromOffset(28, 28), Text = "", AutoButtonColor = false, Parent = topBar })
+    local closeBtn = Create("TextButton", {
+        BackgroundColor3 = Theme.Tertiary, BorderSizePixel = 0,
+        AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0),
+        Size = UDim2.fromOffset(28, 28), Text = "", AutoButtonColor = false, Parent = topBar,
+    })
     Corner(closeBtn, 8)
     local closeStrk = Stroke(closeBtn, Theme.Border, 1)
     local closeIco = NewIcon(closeBtn, "x", 14, Theme.SubText, "x")
@@ -1019,9 +955,7 @@ end
 function RavineUI:Unload()
     self.Unloaded = true
     TipHide()
-    for _, c in ipairs(Connections) do
-        pcall(function() c:Disconnect() end)
-    end
+    for _, c in ipairs(Connections) do pcall(function() c:Disconnect() end) end
     table.clear(Connections)
     self._rainbowConn = nil
     table.clear(ThemeHooks)
@@ -1050,8 +984,7 @@ end
 local function Card(parent, size, bg, class)
     local isButton = class == "TextButton"
     local f = Create(class or "Frame", {
-        BackgroundColor3 = bg or Theme.Card,
-        BorderSizePixel = 0, Size = size, Parent = parent,
+        BackgroundColor3 = bg or Theme.Card, BorderSizePixel = 0, Size = size, Parent = parent,
     })
     if isButton then f.Text = ""; f.AutoButtonColor = false end
     Corner(f, 10)
@@ -1470,9 +1403,7 @@ local function BuildSearch(win, main, onState)
     local function jump(e)
         api.SetOpen(false)
         win:SelectTab(e.Tab)
-        if e.Frame then
-            task.delay(0.1, function() reveal(e) end)
-        end
+        if e.Frame then task.delay(0.1, function() reveal(e) end) end
     end
 
     local function makeRow(e, order)
@@ -1522,10 +1453,7 @@ local function BuildSearch(win, main, onState)
                         n = n + 1
                         shown[n] = e
                         makeRow(e, n)
-                        if not seen[e.Tab] then
-                            seen[e.Tab] = true
-                            tabCount = tabCount + 1
-                        end
+                        if not seen[e.Tab] then seen[e.Tab] = true; tabCount = tabCount + 1 end
                     end
                 end
                 info.Text = "Feature list  -  " .. n .. (n == 1 and " feature" or " features") .. " across " .. Plural(tabCount, "tab")
@@ -1801,7 +1729,6 @@ function Window:BuildMiniBar()
     Stroke(orb, Theme.Border, 1)
     local orbScale = Create("UIScale", { Parent = orb })
 
-    -- ---------- COMPACT ----------
     local compact = Create("CanvasGroup", {
         Size = UDim2.fromScale(1, 1), BackgroundColor3 = Theme.Secondary,
         BorderSizePixel = 0, Parent = orb,
@@ -1845,7 +1772,6 @@ function Window:BuildMiniBar()
         TextTruncate = Enum.TextTruncate.None, LayoutOrder = 0, Parent = rightBox,
     })
 
-    -- ---------- EXPANDED ----------
     local expanded = Create("CanvasGroup", {
         AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0),
         Size = UDim2.new(0, MINI.Wide, 0, 400), BackgroundTransparency = 1,
@@ -2408,7 +2334,6 @@ function RavineUI:CreateWindow(opts)
 
     MakeDraggable(main, topBar, function() return uiScale.Scale end)
 
-    -- Drag-Accent-Stroke
     local dragAccent = Stroke(main, Theme.Accent, 2)
     dragAccent.Transparency = 1
     local wasDragging = false
@@ -2494,7 +2419,6 @@ function RavineUI:CreateWindow(opts)
         Connect(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"), updateScale)
     end
 
-    -- Resize
     local resizeLayer
     if opts.Resizable ~= false then
         resizeLayer = Create("Frame", { Name = "Resize", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 50, Parent = main })
@@ -2579,7 +2503,6 @@ function RavineUI:CreateWindow(opts)
     end)
 
     closeBtn.MouseButton1Click:Connect(function() windowObj:SetVisible(false) end)
-
     minBtn.MouseButton1Click:Connect(function()
         windowObj:CloseSearch()
         windowObj:Minimize()
@@ -2835,9 +2758,7 @@ function Window:AddTab(name, icon)
     end
 
     if not self.ActiveTab then self:SelectTab(tab) end
-
     if self._ensureHeight then self._ensureHeight(116 + 48 * #self.Tabs) end
-
     return tab
 end
 
@@ -3783,18 +3704,12 @@ function Window:AddSettingsTab(opts)
         Text = "Animations", Default = ts.Animations ~= false, Keywords = "motion transitions effects ripple",
         Callback = function(v) ts.Animations = v; RavineUI:_QueueThemeSave() end,
     })
-
-    -- NEU: Weather / Backdrop
     look:AddDropdown("RavineUI_Weather", {
         Text = "Weather", Values = { "None", "Snow", "Rain", "Ember", "Sakura", "Fireflies", "Matrix" },
         Default = "None",
         Callback = function(name)
-            if name == "None" then
-                self:SetBackdrop(false)
-            else
-                self:SetBackdrop(true)
-                self:SetWeather(name)
-            end
+            if name == "None" then self:SetBackdrop(false)
+            else self:SetBackdrop(true); self:SetWeather(name) end
         end,
     })
 
