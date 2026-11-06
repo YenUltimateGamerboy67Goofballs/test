@@ -2400,7 +2400,7 @@ function RavineUI:CreateWindow(opts)
     Stroke(main, Theme.Border, 1)
     local uiScale = Create("UIScale", { Parent = main })
     RavineUI._scaleInst = uiScale
-
+    RavineUI._main = main
     local topBar = Create("Frame", {
         Name = "TopBar",
         BackgroundTransparency = 1,
@@ -2930,6 +2930,31 @@ function RavineUI:CreateWindow(opts)
         Tween(uiScale, 0.5, { Scale = s }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
     end
 
+    -- (dein bisheriger Anim-Code)
+    if Anim() then
+        local s = uiScale.Scale
+        uiScale.Scale = s * 0.86
+        Tween(uiScale, 0.5, { Scale = s }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+    end
+
+    -- NEU: Loading screen statt sofortiger Anzeige
+    if opts.Loading ~= false then
+        main.Visible = false
+        local function runLoader()
+            if not windowObj.Alive then return end
+            RavineUI:ShowLoader({
+                Duration = type(opts.Loading) == "table" and opts.Loading.Duration or 1.8,
+                Steps = type(opts.Loading) == "table" and opts.Loading.Steps or nil,
+                Title = title,
+                Subtitle = subtitle ~= "" and subtitle or "Loading",
+                Icon = logoSrc,
+            })
+        end
+        task.defer(runLoader)
+    end
+
+    return windowObj
+    
     return windowObj
 end
 
@@ -6608,6 +6633,189 @@ function Groupbox:AddKeyPicker(id, opts)
     end)
     RegisterSearch(self, "KeyPicker", opts.Text or id, row, obj, opts)
     return obj
+end
+
+-- ============ LOADING SCREEN (neu) ============
+function RavineUI:ShowLoader(opts)
+    opts = opts or {}
+    local gui = EnsureGui()
+    local duration = opts.Duration or 1.8
+    local steps = opts.Steps or { "Preparing interface", "Loading icons", "Almost there" }
+    local title = opts.Title or "RavineUI"
+    local subtitle = opts.Subtitle or "Loading"
+    local icon = opts.Icon or "moon"
+
+    local W, H = 340, 74 + #steps * 24 + 16
+    local card = Create("CanvasGroup", {
+        Name = "Loader",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, 10),
+        Size = UDim2.fromOffset(W, H),
+        BackgroundColor3 = Theme.Background,
+        BorderSizePixel = 0,
+        GroupTransparency = 1,
+        ZIndex = 10,
+        Parent = gui,
+    })
+    Corner(card, 12)
+    local stroke = Stroke(card, Theme.Border, 1)
+    local scale = Create("UIScale", { Scale = 0.97, Parent = card })
+
+    local shadow = Create("ImageLabel", {
+        Position = UDim2.fromOffset(-25, -25),
+        Size = UDim2.new(1, 50, 1, 50),
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://6014261993",
+        ImageColor3 = Color3.new(0, 0, 0),
+        ImageTransparency = 1,
+        ScaleType = Enum.ScaleType.Slice,
+        SliceCenter = Rect.new(49, 49, 450, 450),
+        ZIndex = 0,
+        Parent = card,
+    })
+
+    local content = Create("CanvasGroup", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = card })
+    local logo = NewIcon(content, icon, 30, Theme.Accent, "\u{2022}")
+    logo.Instance.Position = UDim2.fromOffset(22, 22)
+    Create("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(64, 20),
+        Size = UDim2.new(1, -134, 0, 18), Font = Theme.FontBold,
+        Text = title, TextColor3 = Theme.Text, TextSize = 15,
+        TextXAlignment = Enum.TextXAlignment.Left, Parent = content,
+    })
+    Create("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(64, 39),
+        Size = UDim2.new(1, -134, 0, 15), Font = Theme.Font,
+        Text = subtitle, TextColor3 = Theme.SubText, TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left, Parent = content,
+    })
+    local pct = Create("TextLabel", {
+        BackgroundTransparency = 1,
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -22, 0, 26),
+        Size = UDim2.fromOffset(56, 16), Font = Theme.Font,
+        Text = "0%", TextColor3 = Theme.SubText, TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Right, Parent = content,
+    })
+
+    Create("Frame", {
+        BackgroundColor3 = Theme.Border, BorderSizePixel = 0,
+        Position = UDim2.fromOffset(22, 66), Size = UDim2.new(1, -44, 0, 1),
+        Parent = content,
+    })
+
+    local stepRows = {}
+    for i, stepText in ipairs(steps) do
+        local row = Create("Frame", {
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(22, 74 + (i - 1) * 24),
+            Size = UDim2.new(1, -44, 0, 24), Parent = content,
+        })
+        local dot = Create("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0, 7, 0.5, 0),
+            Size = UDim2.fromOffset(6, 6), BackgroundColor3 = Theme.Tertiary,
+            BorderSizePixel = 0, Parent = row,
+        })
+        Corner(dot, 3)
+        local spinner = Create("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0, 7, 0.5, 0),
+            Size = UDim2.fromOffset(12, 12), BackgroundTransparency = 1, Visible = false, Parent = row,
+        })
+        Corner(spinner, 6)
+        local spinnerStroke = Create("UIStroke", { Color = Theme.Accent, Thickness = 2, Parent = spinner })
+        Create("UIGradient", {
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.5, 0),
+                NumberSequenceKeypoint.new(0.501, 1), NumberSequenceKeypoint.new(1, 1),
+            }), Parent = spinnerStroke,
+        })
+        local check = NewIcon(row, "check", 14, Theme.Accent, "\u{2713}")
+        check.Instance.AnchorPoint = Vector2.new(0.5, 0.5)
+        check.Instance.Position = UDim2.new(0, 7, 0.5, 0)
+        check.Instance.Visible = false
+        local lbl = Create("TextLabel", {
+            BackgroundTransparency = 1, Position = UDim2.fromOffset(24, 0),
+            Size = UDim2.new(1, -24, 1, 0), Font = Theme.Font,
+            Text = stepText, TextColor3 = Theme.SubText, TextSize = 13,
+            TextTransparency = 0.45, TextXAlignment = Enum.TextXAlignment.Left, Parent = row,
+        })
+        stepRows[i] = { Dot = dot, Spinner = spinner, Check = check, Label = lbl, State = "pending" }
+    end
+
+    local barBg = Create("Frame", {
+        AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1),
+        Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = Theme.Tertiary,
+        BorderSizePixel = 0, Parent = content,
+    })
+    local barFill = Create("Frame", {
+        Size = UDim2.fromScale(0, 1), BackgroundColor3 = Theme.Accent,
+        BorderSizePixel = 0, Parent = barBg,
+    })
+
+    local function setStep(i, state)
+        local r = stepRows[i]
+        if not r or r.State == state then return end
+        r.State = state
+        r.Dot.Visible = state == "pending"
+        r.Spinner.Visible = state == "active"
+        r.Check.Instance.Visible = state == "done"
+        Tween(r.Label, 0.2, {
+            TextTransparency = state == "pending" and 0.45 or 0,
+            TextColor3 = state == "active" and Theme.Text or Theme.SubText,
+        })
+    end
+
+    Tween(card, 0.45, { GroupTransparency = 0, Position = UDim2.new(0.5, 0, 0.5, 0) }, Enum.EasingStyle.Quint)
+    Tween(scale, 0.45, { Scale = 1 }, Enum.EasingStyle.Quint)
+    Tween(shadow, 0.4, { ImageTransparency = 0.55 })
+    Tween(barFill, 0.8 * duration, { Size = UDim2.fromScale(0.85, 1) }, Enum.EasingStyle.Quart)
+
+    local rotConn
+    rotConn = RunService.RenderStepped:Connect(function(dt)
+        if not card.Parent then rotConn:Disconnect(); return end
+        pct.Text = math.floor(barFill.Size.X.Scale * 100 + 0.5) .. "%"
+        for _, r in ipairs(stepRows) do
+            if r.State == "active" then
+                r.Spinner.Rotation = (r.Spinner.Rotation + dt * 360) % 360
+            end
+        end
+    end)
+
+    task.spawn(function()
+        for i = 1, #steps do
+            task.wait(duration / #steps)
+            if not card.Parent then return end
+            if i > 1 then setStep(i - 1, "done") end
+            setStep(i, "active")
+        end
+    end)
+
+    task.delay(duration + 0.3, function()
+        for i = 1, #stepRows do setStep(i, "done") end
+        Tween(barFill, 0.25, { Size = UDim2.fromScale(1, 1) }, Enum.EasingStyle.Quint)
+        Tween(content, 0.18, { GroupTransparency = 1 })
+        local finalScale = RavineUI._scaleInst and RavineUI._scaleInst.Scale or 1
+        local mainSize = RavineUI._main and RavineUI._main.Size or UDim2.fromOffset(700, 430)
+        Tween(card, 0.5, {
+            Size = UDim2.fromOffset(mainSize.X.Offset * finalScale, mainSize.Y.Offset * finalScale),
+            Position = UDim2.new(0.5, 0, 0.5, 0),
+        }, Enum.EasingStyle.Quint)
+        task.delay(0.28, function()
+            if rotConn then rotConn:Disconnect() end
+            if RavineUI._main then
+                RavineUI._main.Visible = true
+                if RavineUI._scaleInst then
+                    local s = RavineUI._scaleInst.Scale
+                    RavineUI._scaleInst.Scale = s * 0.86
+                    Tween(RavineUI._scaleInst, 0.5, { Scale = s }, Enum.EasingStyle.Back)
+                end
+            end
+            Tween(card, 0.25, { GroupTransparency = 1 })
+            Tween(stroke, 0.2, { Transparency = 1 })
+            Tween(shadow, 0.2, { ImageTransparency = 1 })
+        end)
+        task.delay(0.6, function() card:Destroy() end)
+    end)
 end
 
 -- ============ INIT ============
