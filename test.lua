@@ -2256,55 +2256,269 @@ local function installRavineCompatibility(library)
         return window
     end
 
-    -- Built-in reusable Config tab. This is UI/configuration-only and is
-    -- attached to every window created through the compatibility constructor.
+    -- Built-in reusable Config tab. It is attached after the script has
+    -- finished declaring its tabs, so it always appears at the bottom.
     local function addBuiltInConfigTab(window)
-        if not window or window._OuroBuiltInConfigTab then return window and window.ConfigTab end
+        if not window or window._OuroBuiltInConfigTab then
+            return window and window.ConfigTab
+        end
         window._OuroBuiltInConfigTab = true
-        local tab = window:AddTab("Config", "settings")
+
+        local tab
+        for _, candidate in ipairs(window.Tabs or {}) do
+            if string.lower(tostring(candidate.Name or "")) == "config" then
+                tab = adaptTab(candidate)
+                break
+            end
+        end
+        if not tab then
+            tab = window:AddTab("Config", "settings")
+        end
         window.ConfigTab = tab
+
+        -- Keep Config as the final visible sidebar tab. Re-number every tab
+        -- after each insertion instead of assigning Config a large LayoutOrder;
+        -- this also handles scripts that create tabs after the deferred setup.
+        local function reorderConfigLast(targetWindow)
+            local tabs = targetWindow and targetWindow.Tabs
+            local configTab = targetWindow and targetWindow.ConfigTab
+            if type(tabs) ~= "table" or not configTab then return end
+            local ordered = {}
+            for _, candidate in ipairs(tabs) do
+                if candidate ~= configTab then
+                    table.insert(ordered, candidate)
+                end
+            end
+            local present = table.find(tabs, configTab) ~= nil
+            if present then table.insert(ordered, configTab) end
+            for index, candidate in ipairs(ordered) do
+                if candidate._button then
+                    candidate._button.LayoutOrder = index
+                end
+            end
+            -- Keep the public tab list in the same order as the sidebar.
+            if present then
+                for index = #tabs, 1, -1 do tabs[index] = nil end
+                for _, candidate in ipairs(ordered) do table.insert(tabs, candidate) end
+            end
+        end
+
+        if not window._OuroConfigTabOrderHook then
+            window._OuroConfigTabOrderHook = true
+            local addTab = window.AddTab
+            window.AddTab = function(self, name, icon, ...)
+                -- If the script declares its own Config tab, reuse the built-in
+                -- one rather than creating a duplicate.
+                if self.ConfigTab and string.lower(tostring(name or "")) == "config" then
+                    reorderConfigLast(self)
+                    return self.ConfigTab
+                end
+                local created = addTab(self, name, icon, ...)
+                reorderConfigLast(self)
+                return created
+            end
+        end
+
         local configs = tab:AddLeftGroupbox("Configurations", "folder")
-        local themes = tab:AddRightGroupbox("Themes", "palette")
-        local configName = "default"
-        local renameTo = ""
-        local importCode = ""
-        configs:AddTextbox("Ouro_Config_Name", { Text = "Config Name", Default = configName, Placeholder = "Enter config name", Callback = function(v) configName = tostring(v or "") end })
-        configs:AddButton("Save", function() local ok, err = window:SaveConfig(configName) window:Notify({Title = ok and "Config saved" or "Config error", Content = tostring(err or configName), Type = ok and "Success" or "Error"}) end)
-        configs:AddButton("Load", function() local ok, err = window:LoadConfig(configName) window:Notify({Title = ok and "Config loaded" or "Config error", Content = tostring(err or configName), Type = ok and "Success" or "Error"}) end)
-        configs:AddButton("Delete", function() local ok, err = window:DeleteConfig(configName) window:Notify({Title = ok and "Config deleted" or "Config error", Content = tostring(err or configName), Type = ok and "Success" or "Error"}) end)
-        configs:AddButton("Reset", function() local ok = window:ResetConfig() window:Notify({Title = ok and "Settings reset" or "Reset", Content = "Controls restored to their defaults"}) end)
-        configs:AddTextbox("Ouro_Config_Rename", { Text = "Rename to", Default = "", Placeholder = "New config name", Callback = function(v) renameTo = tostring(v or "") end })
-        configs:AddButton("Rename", function() local ok, err = window:RenameConfig(configName, renameTo) if ok then configName = renameTo end window:Notify({Title = ok and "Config renamed" or "Rename error", Content = tostring(err or configName), Type = ok and "Success" or "Error"}) end)
-        configs:AddButton("Refresh configs", function() local names = window:ListConfigs() window:Notify({Title = "Saved configurations", Content = #names > 0 and table.concat(names, ", ") or "No saved configs found"}) end)
-        configs:AddToggle("Ouro_Config_Autoload", { Text = "Auto Load Config", Default = window:GetAutoload("Global") ~= nil, Callback = function(v) window:SetAutoload(v and configName or nil, "Global") end })
-        configs:AddDropdown("Ouro_Config_AutoloadMode", { Text = "Autoload mode", Values = {"All accounts", "This account"}, Default = window:GetAutoloadMode() or "All accounts", Callback = function(v) window:SetAutoloadMode(v) end })
-        configs:AddTextbox("Ouro_Config_ImportCode", { Text = "Import code", Default = "", Placeholder = "Paste config code", Callback = function(v) importCode = tostring(v or "") end })
-        configs:AddButton("Import config", function() local ok, err = window:ImportConfig(importCode, configName, true) window:Notify({Title = ok and "Config imported" or "Import error", Content = tostring(err or configName), Type = ok and "Success" or "Error"}) end)
-        configs:AddButton("Copy config code", function() local code, err = window:ExportConfig(configName) if code and type(setclipboard) == "function" then setclipboard(code) window:Notify({Title = "Copied", Content = "Config code copied to clipboard"}) else window:Notify({Title = "Export unavailable", Content = tostring(err or "Clipboard API unavailable"), Type = "Error"}) end end)
+        local themes = tab:AddRightGroupbox("Themes & Appearance", "palette")
+        local configName, renameTo, importCode = "default", "", ""
+        local themeName, themeToRename = "OuroCustom", ""
+
+        local function notify(title, message, ok)
+            window:Notify({ Title = title, Content = tostring(message or ""), Type = ok == false and "Error" or "Success" })
+        end
+        local function configNames()
+            local names = window:ListConfigs()
+            return type(names) == "table" and names or {}
+        end
+        local function themeNames()
+            local names = window:ListThemes()
+            return type(names) == "table" and names or {}
+        end
+
+        configs:AddTextbox("Ouro_Config_Name", {
+            Text = "Config Name", Default = configName, Placeholder = "Enter config name",
+            Callback = function(v) configName = tostring(v or "") end
+        })
+        configs:AddButton("Save Config", function()
+            local ok, err = window:SaveConfig(configName)
+            notify(ok and "Config saved" or "Config error", err or configName, ok)
+        end)
+        configs:AddButton("Load Config", function()
+            local ok, err = window:LoadConfig(configName)
+            notify(ok and "Config loaded" or "Config error", err or configName, ok)
+        end)
+        configs:AddButton("Delete Config", function()
+            local ok, err = window:DeleteConfig(configName)
+            notify(ok and "Config deleted" or "Delete error", err or configName, ok)
+        end)
+        configs:AddButton("Reset Settings", function()
+            local ok, err = window:ResetConfig()
+            notify(ok and "Settings reset" or "Reset error", err or "Controls restored to their defaults", ok)
+        end)
+        configs:AddTextbox("Ouro_Config_Rename", {
+            Text = "Rename to", Default = "", Placeholder = "New config name",
+            Callback = function(v) renameTo = tostring(v or "") end
+        })
+        configs:AddButton("Rename Config", function()
+            local ok, err = window:RenameConfig(configName, renameTo)
+            if ok then configName = renameTo end
+            notify(ok and "Config renamed" or "Rename error", err or configName, ok)
+        end)
+        configs:AddButton("Refresh Configs", function()
+            local names = configNames()
+            notify("Saved configurations", #names > 0 and table.concat(names, ", ") or "No saved configs found")
+        end)
+        configs:AddToggle("Ouro_Config_Autoload", {
+            Text = "Auto Load Config", Default = window:GetAutoload("Global") ~= nil,
+            Callback = function(v)
+                local ok, err = window:SetAutoload(v and configName or nil, "Global")
+                if ok == false then notify("Autoload error", err, false) end
+            end
+        })
+        configs:AddDropdown("Ouro_Config_AutoloadMode", {
+            Text = "Autoload mode", Values = {"All accounts", "This account"},
+            Default = window:GetAutoloadMode() or "All accounts",
+            Callback = function(v) window:SetAutoloadMode(v) end
+        })
+        configs:AddTextbox("Ouro_Config_ImportCode", {
+            Text = "Import code", Default = "", Placeholder = "Paste config code",
+            Callback = function(v) importCode = tostring(v or "") end
+        })
+        configs:AddButton("Import Config", function()
+            local ok, err = window:ImportConfig(importCode, configName, true)
+            notify(ok and "Config imported" or "Import error", err or configName, ok)
+        end)
+        configs:AddButton("Copy / Export Config", function()
+            local code, err = window:ExportConfig(configName)
+            if code and type(setclipboard) == "function" then
+                setclipboard(code)
+                notify("Config exported", "Config code copied to clipboard")
+            else
+                notify("Export unavailable", err or "Clipboard API unavailable", false)
+            end
+        end)
 
         local presetNames = {}
         for name in pairs(library.ThemePresets or {}) do table.insert(presetNames, name) end
         table.sort(presetNames)
-        themes:AddDropdown("Ouro_Theme_Preset", { Text = "Preset", Values = presetNames, Default = library.ThemeName or presetNames[1], Callback = function(v) library:SetTheme(v) end })
-        themes:AddToggle("Ouro_Theme_Dim", { Text = "Dim", Default = true, Callback = function(v) window:SetDim(v) end })
-        themes:AddToggle("Ouro_Theme_Transparent", { Text = "Transparent", Default = window.Transparent == true, Callback = function(v) window:SetTransparent(v) end })
-        themes:AddDropdown("Ouro_Theme_DragStyle", { Text = "Drag Style", Values = {"Outline", "Brackets", "Ghost", "Frame", "Off"}, Default = window:GetDragStyle() or "Outline", Callback = function(v) window:SetDragStyle(v) end })
-        themes:AddDropdown("Ouro_Theme_IslandStyle", { Text = "Dynamic Island", Values = {"Show on Hover", "Always Show"}, Default = window:GetIslandStyle() or "Show on Hover", Callback = function(v) window:SetIslandStyle(v) end })
-        themes:AddToggle("Ouro_Theme_Adaptive", { Text = "Adaptive Size", Default = window:GetAdaptiveSize() ~= false, Callback = function(v) window:SetAdaptiveSize(v) end })
-        themes:AddSlider("Ouro_Theme_Scale", { Text = "UI Scale", Min = 60, Max = 150, Default = math.floor((window:GetUIScale() or 1) * 100), Suffix = "%", Callback = function(v) window:SetUIScale((tonumber(v) or 100) / 100) end })
-        themes:AddDropdown("Ouro_Theme_Density", { Text = "Density", Values = {"Compact", "Default", "Comfortable"}, Default = window:GetDensity() or "Default", Callback = function(v) window:SetDensity(v) end })
-        themes:AddDropdown("Ouro_Theme_Weather", { Text = "Weather", Values = {"None", "Sakura", "Snow", "Rain", "Leaves", "Embers"}, Default = window.Weather or "None", Callback = function(v) window:SetWeather(v) end })
-        themes:AddDropdown("Ouro_Theme_WeatherMode", { Text = "Weather Mode", Values = {"Screen", "UI"}, Default = window.WeatherMode or "Screen", Callback = function(v) window:SetWeatherMode(v) end })
+        themes:AddDropdown("Ouro_Theme_Preset", {
+            Text = "Theme Preset", Values = presetNames, Default = library.ThemeName or presetNames[1],
+            Callback = function(v) library:SetTheme(v) end
+        })
+        themes:AddDropdown("Ouro_Theme_AnimePreset", {
+            Text = "Anime / Aesthetic Preset",
+            Values = {"Sakura", "Nebula", "Synthwave", "Valentine", "Velvet", "Aurora"},
+            Default = "Sakura", Callback = function(v) library:SetTheme(v) end
+        })
+        themes:AddTextbox("Ouro_Theme_Name", {
+            Text = "Theme Name", Default = themeName, Placeholder = "Theme name",
+            Callback = function(v) themeName = tostring(v or "") end
+        })
+        themes:AddButton("Save Theme", function()
+            local ok, err = window:SaveTheme(themeName)
+            notify(ok and "Theme saved" or "Theme error", err or themeName, ok)
+        end)
+        themes:AddButton("Load Theme", function()
+            local ok, err = window:LoadTheme(themeName)
+            notify(ok and "Theme loaded" or "Theme error", err or themeName, ok)
+        end)
+        themes:AddButton("Delete Theme", function()
+            local ok, err = window:DeleteTheme(themeName)
+            notify(ok and "Theme deleted" or "Theme error", err or themeName, ok)
+        end)
+        themes:AddButton("Set Current Theme as Default", function()
+            local ok, err = window:SetDefaultTheme(themeName)
+            notify(ok and "Default theme updated" or "Theme error", err or themeName, ok)
+        end)
+        local backgroundNames = window:ListBackgrounds()
+        table.insert(backgroundNames, 1, "None")
+        themes:AddDropdown("Ouro_Theme_Background", {
+            Text = "Background / Anime Art", Values = backgroundNames,
+            Default = window:GetBackground() or "None",
+            Callback = function(v)
+                local ok, err = window:SetBackground(v == "None" and false or v)
+                if ok == false then notify("Background error", err, false) end
+            end
+        })
+        themes:AddSlider("Ouro_Theme_BackgroundTransparency", {
+            Text = "Background Transparency", Min = 0, Max = 100,
+            Default = math.floor((window.BackgroundTransparency or 0.35) * 100), Suffix = "%",
+            Callback = function(v) window:SetBackgroundTransparency((tonumber(v) or 35) / 100) end
+        })
+        themes:AddToggle("Ouro_Theme_Dim", {
+            Text = "Dim", Default = true, Callback = function(v) window:SetDim(v) end
+        })
+        themes:AddToggle("Ouro_Theme_Transparent", {
+            Text = "Transparent", Default = window.Transparent == true,
+            Callback = function(v) window:SetTransparent(v) end
+        })
+        themes:AddDropdown("Ouro_Theme_DragStyle", {
+            Text = "Drag Style", Values = {"Outline", "Brackets", "Ghost", "Frame", "Off"},
+            Default = window:GetDragStyle() or "Outline", Callback = function(v) window:SetDragStyle(v) end
+        })
+        themes:AddDropdown("Ouro_Theme_IslandStyle", {
+            Text = "Dynamic Island", Values = {"Show on Hover", "Always Show"},
+            Default = window:GetIslandStyle() or "Show on Hover", Callback = function(v) window:SetIslandStyle(v) end
+        })
+        themes:AddToggle("Ouro_Theme_Adaptive", {
+            Text = "Adaptive Size", Default = window:GetAdaptiveSize() ~= false,
+            Callback = function(v) window:SetAdaptiveSize(v) end
+        })
+        themes:AddSlider("Ouro_Theme_Scale", {
+            Text = "UI Scale", Min = 60, Max = 150,
+            Default = math.floor((window:GetUIScale() or 1) * 100), Suffix = "%",
+            Callback = function(v) window:SetUIScale((tonumber(v) or 100) / 100) end
+        })
+        themes:AddDropdown("Ouro_Theme_Density", {
+            Text = "Density", Values = {"Compact", "Default", "Comfortable"},
+            Default = window:GetDensity() or "Default", Callback = function(v) window:SetDensity(v) end
+        })
+        themes:AddDropdown("Ouro_Theme_Weather", {
+            Text = "Weather", Values = {"None", "Sakura", "Snow", "Rain", "Leaves", "Embers"},
+            Default = window.Weather or "None", Callback = function(v) window:SetWeather(v) end
+        })
+        themes:AddDropdown("Ouro_Theme_WeatherMode", {
+            Text = "Weather Mode", Values = {"Screen", "UI"},
+            Default = window.WeatherMode or "Screen", Callback = function(v) window:SetWeatherMode(v) end
+        })
+        themes:AddSlider("Ouro_Theme_WeatherDensity", {
+            Text = "Weather Density", Min = 0, Max = 3, Default = window._weatherDensity or 1,
+            Callback = function(v) window:SetWeatherDensity(v) end
+        })
+        themes:AddSlider("Ouro_Theme_WeatherSpeed", {
+            Text = "Weather Speed", Min = 1, Max = 30, Default = math.floor((window._weatherSpeed or 1) * 10),
+            Callback = function(v) window:SetWeatherSpeed((tonumber(v) or 10) / 10) end
+        })
+
+        -- Move the Config button to the final sidebar position.
+        if tab._button and window.Tabs then
+            -- Config is always the last entry, regardless of when it was made.
+            local ordered = {}
+            for _, candidate in ipairs(window.Tabs) do
+                if candidate ~= tab then table.insert(ordered, candidate) end
+            end
+            if table.find(window.Tabs, tab) then table.insert(ordered, tab) end
+            for index, candidate in ipairs(ordered) do
+                if candidate._button then candidate._button.LayoutOrder = index end
+            end
+            for index = #window.Tabs, 1, -1 do window.Tabs[index] = nil end
+            for _, candidate in ipairs(ordered) do table.insert(window.Tabs, candidate) end
+        end
         return tab
     end
 
-    -- Preserve the original OuroFlow constructor and all native options.
+    -- Preserve the native OuroFlow constructor while adding the legacy API.
     local originalWindow = library.Window
     function library:CreateWindow(options)
         options = copyTable(options)
         options.Name = options.Title or options.Name or "RavineUI"
         options.LoadingSubtitle = options.Subtitle or options.LoadingSubtitle
         options.Keybind = options.Keybind or options.ToggleUIKeybind
+        local fixedLogo = "rbxassetid://128553373538203"
+        options.Icon = fixedLogo
+        library.Assets = library.Assets or {}
+        library.Assets.Logo = fixedLogo
         if options.Size == nil and options.Width and options.Height then
             options.Size = UDim2.fromOffset(options.Width, options.Height)
         end
@@ -2312,7 +2526,13 @@ local function installRavineCompatibility(library)
             error("[OuroFlow compatibility] OuroFlow Window constructor is unavailable", 2)
         end
         local window = adaptWindow(originalWindow(library, options))
-        addBuiltInConfigTab(window)
+        -- BuildUI can now declare every ordinary tab before Config is appended.
+        task.defer(function()
+            if window and not window._destroyed then
+                local ok, err = pcall(addBuiltInConfigTab, window)
+                if not ok then warn("[OuroFlow Config] " .. tostring(err)) end
+            end
+        end)
         return window
     end
 
