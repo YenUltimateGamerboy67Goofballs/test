@@ -2202,7 +2202,24 @@ local function installRavineCompatibility(library)
         window._RavineWindow = true
         local originalTab = window.Tab
         function window:AddTab(name, icon)
+            if type(originalTab) ~= "function" then
+                error("[OuroFlow compatibility] OuroFlow Tab constructor is unavailable", 2)
+            end
             return adaptTab(originalTab(self, { Name = name, Title = name, Icon = icon }))
+        end
+        -- RavineUI scripts commonly create a dashboard before their normal tabs.
+        -- OuroFlow has no native HomeTab constructor, so create a regular tab and
+        -- expose a small Home metadata object instead of letting UI construction stop.
+        function window:AddHomeTab(options)
+            options = copyTable(options)
+            local tab = self:AddTab(options.Name or "Home", options.Icon or "house")
+            tab.Home = tab.Home or {}
+            tab.Home.Options = options
+            self.HomeTab = tab
+            return tab
+        end
+        function window:AddHomeTabClassic(options)
+            return self:AddHomeTab(options)
         end
         function window:SetVisible(visible)
             if type(self.Toggle) == "function" then
