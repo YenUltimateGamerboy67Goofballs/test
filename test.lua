@@ -2321,6 +2321,46 @@ local function installRavineCompatibility(library)
             end
         end
 
+        -- Native-style Menu panel, matching OuroFlow's own settings layout.
+        -- Keep it separate from ConfigManager so the saved-config list stays intact.
+        local menuBox
+        if type(tab.AddLeftGroupbox) == "function" then
+            menuBox = tab:AddLeftGroupbox("Menu", "monitor")
+        elseif type(tab.AddGroupbox) == "function" then
+            menuBox = tab:AddGroupbox("Menu", "monitor")
+        end
+        if menuBox then
+            if type(menuBox.AddButton) == "function" then
+                menuBox:AddButton("Toggle UI", {
+                    Callback = function()
+                        if window and not window._destroyed and type(window.Toggle) == "function" then
+                            window:Toggle()
+                        end
+                    end,
+                })
+                menuBox:AddButton("Unload UI", {
+                    Callback = function()
+                        if window and not window._destroyed then
+                            if type(window.Unload) == "function" then
+                                window:Unload()
+                            elseif type(window.Destroy) == "function" then
+                                window:Destroy()
+                            end
+                        end
+                    end,
+                })
+            end
+            if type(menuBox.AddToggle) == "function" then
+                menuBox:AddToggle("Ouro_MinimizeOnStart", {
+                    Name = "Minimize UI on Start",
+                    Default = false,
+                    Callback = function(value)
+                        window._minimizeOnStart = value == true
+                    end,
+                })
+            end
+        end
+
         -- Use OuroFlow's ORIGINAL manager widgets. These are the full native
         -- ConfigManager/ThemeManager panels (saved-config pick list, loaded/auto
         -- indicators, rename/reset/share, background image picker, palette editor,
@@ -2388,6 +2428,9 @@ local function installRavineCompatibility(library)
             if window and not window._destroyed then
                 local ok, err = pcall(addBuiltInConfigTab, window)
                 if not ok then warn("[OuroFlow Config] " .. tostring(err)) end
+                if window and window._minimizeOnStart and type(window.Minimize) == "function" then
+                    window:Minimize()
+                end
             end
         end)
         return window
